@@ -10,7 +10,7 @@ import (
 
 func TestConcurrentMapGetExisting(t *testing.T) {
 	// 已存在的 key 应立即返回；即使超时时间为 0，也不应产生超时错误。
-	cm := NewConcurrentMap()
+	cm := NewConcurrentMap[int, int]()
 	cm.Set(1, 100)
 
 	got, err := cm.Get(1, 0)
@@ -24,7 +24,7 @@ func TestConcurrentMapGetExisting(t *testing.T) {
 
 func TestConcurrentMapSetOverwritesValue(t *testing.T) {
 	// 对同一个 key 再次赋值后，Get 应返回最后一次写入的值。
-	cm := NewConcurrentMap()
+	cm := NewConcurrentMap[int, int]()
 	cm.Set(1, 100)
 	cm.Set(1, 200)
 
@@ -38,21 +38,35 @@ func TestConcurrentMapSetOverwritesValue(t *testing.T) {
 }
 
 func TestConcurrentMapGetTimeout(t *testing.T) {
-	// key 在指定时间内没有写入时，Get 应返回约定值和超时错误。
-	cm := NewConcurrentMap()
+	// key 在指定时间内没有写入时，Get 应返回值类型的零值和超时错误。
+	cm := NewConcurrentMap[int, int]()
 
 	got, err := cm.Get(1, 10*time.Millisecond)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Get() error = %v, want context.DeadlineExceeded", err)
 	}
-	if got != -1 {
-		t.Fatalf("Get() = %d, want -1", got)
+	if got != 0 {
+		t.Fatalf("Get() = %d, want 0", got)
+	}
+}
+
+func TestConcurrentMapSupportsGenericTypes(t *testing.T) {
+	// key 和 value 都应支持使用 int 之外的类型。
+	cm := NewConcurrentMap[string, string]()
+	cm.Set("name", "Alice")
+
+	got, err := cm.Get("name", time.Second)
+	if err != nil {
+		t.Fatalf("Get() returned an unexpected error: %v", err)
+	}
+	if got != "Alice" {
+		t.Fatalf("Get() = %q, want %q", got, "Alice")
 	}
 }
 
 func TestConcurrentMapGetWaitsForSet(t *testing.T) {
 	// key 不存在时 Get 应阻塞，随后 Set 应唤醒 Get 并传回写入的值。
-	cm := NewConcurrentMap()
+	cm := NewConcurrentMap[int, int]()
 	result := make(chan int, 1)
 	errResult := make(chan error, 1)
 
@@ -84,7 +98,7 @@ func TestConcurrentMapMultipleWaiters(t *testing.T) {
 	// 多个 goroutine 同时读取同一个缺失的 key 时，都应安全地得到写入值。
 	const waiterCount = 100
 
-	cm := NewConcurrentMap()
+	cm := NewConcurrentMap[int, int]()
 	results := make(chan int, waiterCount)
 	errs := make(chan error, waiterCount)
 	var started sync.WaitGroup
@@ -118,7 +132,7 @@ func TestConcurrentMapConcurrentDistinctKeys(t *testing.T) {
 	// 并发操作不同 key 时，每个 Get 都应读取到对应 key 的值且不发生数据竞争。
 	const keyCount = 100
 
-	cm := NewConcurrentMap()
+	cm := NewConcurrentMap[int, int]()
 	var wg sync.WaitGroup
 	wg.Add(keyCount)
 
@@ -142,7 +156,7 @@ func TestConcurrentMapConcurrentDistinctKeys(t *testing.T) {
 	wg.Wait()
 }
 
-func waitUntilWaiting(t *testing.T, cm *ConcurrentMap, key int) {
+func waitUntilWaiting[K comparable, V any](t *testing.T, cm *ConcurrentMap[K, V], key K) {
 	// 轮询内部等待通道仅用于测试同步，不依赖固定休眠时间判断 goroutine 状态。
 	t.Helper()
 
@@ -157,5 +171,5 @@ func waitUntilWaiting(t *testing.T, cm *ConcurrentMap, key int) {
 		time.Sleep(time.Millisecond)
 	}
 
-	t.Fatalf("Get(%d) did not start waiting", key)
+	t.Fatalf("Get(%v) did not start waiting", key)
 }

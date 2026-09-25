@@ -38,20 +38,20 @@ func NewmyChan() *myChan {
 	}
 }
 
-type ConcurrentMap struct {
+type ConcurrentMap[K comparable, V any] struct {
 	sync.Mutex
-	conMap   map[int]int     // 存放真实值的字典
-	key2Chan map[int]*myChan // 注意这里存的一定是指针类型
+	conMap   map[K]V       // 存放真实值的字典
+	key2Chan map[K]*myChan // 注意这里存的一定是指针类型
 }
 
-func NewConcurrentMap() *ConcurrentMap {
-	return &ConcurrentMap{
-		conMap:   make(map[int]int),
-		key2Chan: make(map[int]*myChan),
+func NewConcurrentMap[K comparable, V any]() *ConcurrentMap[K, V] {
+	return &ConcurrentMap[K, V]{
+		conMap:   make(map[K]V),
+		key2Chan: make(map[K]*myChan),
 	}
 }
 
-func (cm *ConcurrentMap) Set(key, value int) {
+func (cm *ConcurrentMap[K, V]) Set(key K, value V) {
 	cm.Lock()
 	defer cm.Unlock()
 
@@ -64,7 +64,7 @@ func (cm *ConcurrentMap) Set(key, value int) {
 	}
 }
 
-func (cm *ConcurrentMap) Get(key int, duration time.Duration) (int, error) {
+func (cm *ConcurrentMap[K, V]) Get(key K, duration time.Duration) (V, error) {
 
 	// 先上锁查询
 	cm.Lock()
@@ -93,7 +93,8 @@ func (cm *ConcurrentMap) Get(key int, duration time.Duration) (int, error) {
 		defer cm.Unlock()
 		return cm.conMap[key], nil
 	case <-ctx.Done():
-		return -1, ctx.Err()
+		var zero V
+		return zero, ctx.Err()
 
 	}
 
