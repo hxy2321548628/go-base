@@ -1,0 +1,30 @@
+# 本文件用于启动本地学习环境中的 Redis 和 etcd。
+# 在当前目录运行：docker compose up -d
+services:
+  # Redis 可用于实现基于 SET NX、Lua 脚本等方式的分布式锁。
+  redis:
+    # 使用 Redis 7 的官方镜像。
+    image: redis:7
+    ports:
+      # 格式为“宿主机 IP:宿主机端口:容器端口”。
+      # 绑定 127.0.0.1 可防止 Redis 直接暴露给外部网络。
+      - "127.0.0.1:6379:6379"
+    # 开启 AOF（Append Only File）持久化，记录 Redis 的写操作。
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      # 将容器内的数据目录保存到命名卷，重建容器后数据仍在。
+      - redis-data:/data
+    healthcheck:
+      # redis-cli ping 正常时返回 PONG，Compose 据此判断服务是否健康。
+      test: ["CMD", "redis-cli", "ping"]
+      # 每 5 秒检查一次，单次超时为 3 秒，连续失败 10 次后标记为 unhealthy。
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # 异常退出或 Docker 重启后自动恢复；手动停止后不会立即重启。
+    restart: unless-stopped
+
+# 声明两个由 Docker 管理的命名卷。
+# docker compose down 不会删除它们；使用 down -v 才会同时删除数据。
+volumes:
+  redis-data:
